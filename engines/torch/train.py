@@ -69,7 +69,7 @@ def prepare_training_data(games, max_samples=2500000):
 
 
 def train_model(X, y, num_classes, num_epochs=50, batch_size=64, learning_rate=0.0001, 
-                model_save_path="../../models/TORCH_TRAINED.pth",
+                model_save_path="../../models/TORCH_100EPOCHS.pth",
                 move_mapping_path="../../models/move_to_int"):
     """Train the chess model"""
     
@@ -126,7 +126,7 @@ def main():
     parser = argparse.ArgumentParser(description='Train Chess Engine')
     parser.add_argument('--data-dir', default='../../data/pgn', 
                        help='Directory containing PGN files')
-    parser.add_argument('--epochs', type=int, default=50, 
+    parser.add_argument('--epochs', type=int, default=100, 
                        help='Number of training epochs')
     parser.add_argument('--batch-size', type=int, default=64, 
                        help='Training batch size')
@@ -136,7 +136,7 @@ def main():
                        help='Maximum number of training samples')
     parser.add_argument('--limit-files', type=int, default=28, 
                        help='Maximum number of PGN files to process')
-    parser.add_argument('--model-path', default='../../models/TORCH_TRAINED.pth', 
+    parser.add_argument('--model-path', default='../../models/TORCH_100EPOCHS.pth', 
                        help='Path to save trained model')
     parser.add_argument('--mapping-path', default='../../models/move_to_int', 
                        help='Path to save move mapping')
@@ -155,7 +155,8 @@ def main():
                           num_epochs=args.epochs,
                           batch_size=args.batch_size,
                           learning_rate=args.learning_rate,
-                          model_save_path=args.model_path)
+                          model_save_path=args.model_path,
+                          move_mapping_path=args.mapping_path)
         
         # Save move mapping
         print(f"Saving move mapping to {args.mapping_path}")

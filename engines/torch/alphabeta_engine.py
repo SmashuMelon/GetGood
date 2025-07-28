@@ -106,21 +106,46 @@ class AlphaBetaEngine:
         self.max_depth = max_depth
         self.nodes_searched = 0
         self.neural_weight = neural_weight
+        self.neural_predictor = None
         
         # Initialize neural network predictor if available
-        self.neural_predictor = None
-        if ChessPredictor and neural_model_path and neural_mapping_path:
-            try:
+        print(f"Initializing AlphaBetaEngine with neural_weight={neural_weight}")
+        
+        if ChessPredictor is None:
+            print("✗ ChessPredictor not available - neural integration disabled")
+            self.neural_weight = 0.0
+            return
+        
+        if neural_weight <= 0.0:
+            print("✓ Neural integration disabled (neural_weight=0.0)")
+            return
+        
+        # Try to initialize neural predictor
+        print("Attempting to load neural predictor...")
+        
+        try:
+            if neural_model_path and neural_mapping_path:
+                print(f"  Using explicit paths: {neural_model_path}, {neural_mapping_path}")
                 self.neural_predictor = ChessPredictor(neural_model_path, neural_mapping_path)
-                print(f"✓ Neural guidance enabled (weight: {neural_weight})")
-            except Exception as e:
-                print(f"✗ Failed to load neural predictor: {e}")
-        elif neural_model_path or neural_mapping_path:
-            try:
-                self.neural_predictor = ChessPredictor()  # Use default paths
-                print(f"✓ Neural guidance enabled with default paths (weight: {neural_weight})")
-            except Exception as e:
-                print(f"✗ Failed to load neural predictor with defaults: {e}")
+            else:
+                print("  Using default paths")
+                self.neural_predictor = ChessPredictor()
+            
+            print(f"✓ Neural guidance enabled (weight: {neural_weight})")
+            print(f"  └─ Device: {self.neural_predictor.device}")
+            print(f"  └─ Classes: {self.neural_predictor.num_classes}")
+            
+        except FileNotFoundError as e:
+            print(f"✗ Neural model files not found: {e}")
+            print("  └─ Falling back to pure traditional evaluation")
+            self.neural_predictor = None
+            self.neural_weight = 0.0
+            
+        except Exception as e:
+            print(f"✗ Failed to load neural predictor: {e}")
+            print("  └─ Falling back to pure traditional evaluation")
+            self.neural_predictor = None
+            self.neural_weight = 0.0
     
     def get_piece_square_value(self, piece: chess.Piece, square: int) -> int:
         """Get positional value for piece on square"""
@@ -226,6 +251,7 @@ class AlphaBetaEngine:
             
         except Exception as e:
             # Fallback to traditional evaluation if neural network fails
+            print(f"Neural evaluation failed: {e}")
             return 0
     
     def hybrid_evaluation(self, board: Board) -> int:
@@ -263,6 +289,9 @@ class AlphaBetaEngine:
         if not moves:
             return moves
         
+        if not self.neural_predictor:
+            return self.traditional_move_ordering(board)
+        
         def move_priority(move):
             priority = 0
             
@@ -288,21 +317,20 @@ class AlphaBetaEngine:
                 priority += 800
             
             # Neural network guidance
-            if self.neural_predictor:
-                try:
-                    move_uci = move.uci()
-                    if move_uci in self.neural_predictor.move_to_int:
-                        # Get neural network probability for this move
-                        X_tensor = self.neural_predictor.prepare_input(board).to(self.neural_predictor.device)
-                        with torch.no_grad():
-                            logits = self.neural_predictor.model(X_tensor)
-                        probabilities = torch.softmax(logits.squeeze(0), dim=0).cpu().numpy()
-                        
-                        move_idx = self.neural_predictor.move_to_int[move_uci]
-                        neural_priority = probabilities[move_idx] * 1000  # Scale up probability
-                        priority += neural_priority
-                except Exception:
-                    pass  # Fall back to traditional ordering if neural network fails
+            try:
+                move_uci = move.uci()
+                if move_uci in self.neural_predictor.move_to_int:
+                    # Get neural network probability for this move
+                    X_tensor = self.neural_predictor.prepare_input(board).to(self.neural_predictor.device)
+                    with torch.no_grad():
+                        logits = self.neural_predictor.model(X_tensor)
+                    probabilities = torch.softmax(logits.squeeze(0), dim=0).cpu().numpy()
+                    
+                    move_idx = self.neural_predictor.move_to_int[move_uci]
+                    neural_priority = probabilities[move_idx] * 1000  # Scale up probability
+                    priority += neural_priority
+            except Exception:
+                pass  # Fall back to traditional ordering if neural network fails
             
             return priority
         
@@ -448,12 +476,12 @@ class AlphaBetaEngine:
 
 def demo():
     """Demo the alpha-beta engine"""
-    print("Alpha-Beta Engine Demo")
+    print("Fixed Alpha-Beta Engine Demo")
     print("="*50)
     
     # Test without neural network
     print("\n1. Traditional Alpha-Beta:")
-    traditional_engine = AlphaBetaEngine(max_depth=4)
+    traditional_engine = AlphaBetaEngine(max_depth=4, neural_weight=0.0)
     board = Board()
     move1 = traditional_engine.get_best_move(board, time_limit=2.0)
     print(f"Move: {move1}")
@@ -468,10 +496,13 @@ def demo():
         move2 = enhanced_engine.get_best_move(board, time_limit=2.0)
         print(f"Move: {move2}")
         
-        if move1 != move2:
-            print(f"Neural guidance changed the move choice!")
+        if enhanced_engine.neural_predictor:
+            if move1 != move2:
+                print(f"✓ Neural guidance changed the move choice!")
+            else:
+                print(f"- Both engines chose the same move")
         else:
-            print(f"Both engines chose the same move")
+            print(f"✗ Neural predictor failed to load")
             
     except Exception as e:
         print(f"Neural enhancement not available: {e}")

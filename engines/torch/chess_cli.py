@@ -6,12 +6,6 @@ import time
 from typing import Optional, Dict, Any
 import chess
 from chess import Board, Move, pgn
-try:
-    from chess.engine import SimpleEngine, Limit
-    STOCKFISH_AVAILABLE = True
-except ImportError:
-    STOCKFISH_AVAILABLE = False
-    print("Warning: Stockfish integration requires python-chess with engine support")
 
 # Add current directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -32,10 +26,9 @@ class ChessGame:
         self.board = Board()
         self.game_history = []
         self.engines = {}
-        self.stockfish_path = None
         
     def initialize_engines(self, neural_model_path=None, neural_mapping_path=None,
-                          alphabeta_depth=4, stockfish_path=None, neural_weight=0.4):
+                          alphabeta_depth=4, neural_weight=0.4):
         """Initialize available engines"""
         print("Initializing engines...")
         
@@ -44,7 +37,7 @@ class ChessGame:
             if neural_model_path and neural_mapping_path:
                 self.engines['neural'] = ChessPredictor(neural_model_path, neural_mapping_path)
             else:
-                self.engines['neural'] = ChessPredictor()
+                self.engines['neural'] = ChessPredictor()  # Uses default paths
             print("✓ Neural network engine loaded")
         except Exception as e:
             print(f"✗ Failed to load neural engine: {e}")
@@ -61,29 +54,21 @@ class ChessGame:
         
         # Neural-enhanced alpha-beta engine
         try:
-            self.engines['alphabeta'] = AlphaBetaEngine(
-                max_depth=alphabeta_depth,
-                neural_model_path=neural_model_path,
-                neural_mapping_path=neural_mapping_path,
-                neural_weight=neural_weight
-            )
+            if neural_model_path and neural_mapping_path:
+                self.engines['alphabeta'] = AlphaBetaEngine(
+                    max_depth=alphabeta_depth,
+                    neural_model_path=neural_model_path,
+                    neural_mapping_path=neural_mapping_path,
+                    neural_weight=neural_weight
+                )
+            else:
+                self.engines['alphabeta'] = AlphaBetaEngine(
+                    max_depth=alphabeta_depth,
+                    neural_weight=neural_weight  # Uses default paths
+                )
             print("✓ Neural-enhanced alpha-beta engine loaded")
         except Exception as e:
             print(f"✗ Failed to load neural-enhanced alpha-beta engine: {e}")
-        
-        # Stockfish engine
-        if stockfish_path and os.path.exists(stockfish_path) and STOCKFISH_AVAILABLE:
-            try:
-                self.engines['stockfish'] = SimpleEngine.popen_uci(stockfish_path)
-                self.stockfish_path = stockfish_path
-                print("✓ Stockfish engine loaded")
-            except Exception as e:
-                print(f"✗ Failed to load Stockfish: {e}")
-        elif stockfish_path and not STOCKFISH_AVAILABLE:
-            print("✗ Stockfish integration not available with current chess library version")
-            print("  Install python-chess[engine] for Stockfish support")
-        elif stockfish_path:
-            print(f"✗ Stockfish not found at: {stockfish_path}")
     
     def get_engine_move(self, engine_name: str, time_limit=5.0) -> Optional[str]:
         """Get move from specified engine"""
@@ -96,9 +81,6 @@ class ChessGame:
                 return self.engines[engine_name].predict_move(self.board)
             elif engine_name in ['alphabeta', 'traditional']:
                 return self.engines[engine_name].get_best_move(self.board, time_limit)
-            elif engine_name == 'stockfish' and STOCKFISH_AVAILABLE:
-                result = self.engines[engine_name].play(self.board, Limit(time=time_limit))
-                return result.move.uci() if result.move else None
         except Exception as e:
             print(f"Error getting move from {engine_name}: {e}")
             return None
@@ -292,11 +274,8 @@ class ChessGame:
     
     def cleanup(self):
         """Clean up resources"""
-        if 'stockfish' in self.engines:
-            try:
-                self.engines['stockfish'].quit()
-            except:
-                pass
+        # No cleanup needed for our engines
+        pass
 
 
 def main():
@@ -305,19 +284,18 @@ def main():
                        default='human-engine', help='Game mode')
     parser.add_argument('--human-color', choices=['white', 'black'], default='white',
                        help='Human player color (for human-engine mode)')
-    parser.add_argument('--white-engine', choices=['neural', 'alphabeta', 'traditional', 'stockfish'],
+    parser.add_argument('--white-engine', choices=['neural', 'alphabeta', 'traditional'],
                        default='alphabeta', help='White player engine')
-    parser.add_argument('--black-engine', choices=['neural', 'alphabeta', 'traditional', 'stockfish'],
+    parser.add_argument('--black-engine', choices=['neural', 'alphabeta', 'traditional'],
                        default='traditional', help='Black player engine')
-    parser.add_argument('--engine', choices=['neural', 'alphabeta', 'traditional', 'stockfish'],
+    parser.add_argument('--engine', choices=['neural', 'alphabeta', 'traditional'],
                        default='alphabeta', help='Engine for human-engine mode')
-    parser.add_argument('--neural-model', help='Path to neural network model')
-    parser.add_argument('--neural-mapping', help='Path to neural network move mapping')
+    parser.add_argument('--neural-model', help='Path to neural network model (default: ../../models/TORCH_100EPOCHS.pth)')
+    parser.add_argument('--neural-mapping', help='Path to neural network move mapping (default: ../../models/move_to_int)')
     parser.add_argument('--alphabeta-depth', type=int, default=4,
                        help='Alpha-beta search depth')
     parser.add_argument('--neural-weight', type=float, default=0.4,
                        help='Weight for neural evaluation (0.0-1.0, default 0.4)')
-    parser.add_argument('--stockfish-path', help='Path to Stockfish executable')
     parser.add_argument('--time-per-move', type=float, default=2.0,
                        help='Time limit per move (seconds)')
     parser.add_argument('--max-moves', type=int, default=100,
@@ -336,7 +314,6 @@ def main():
             neural_model_path=args.neural_model,
             neural_mapping_path=args.neural_mapping,
             alphabeta_depth=args.alphabeta_depth,
-            stockfish_path=args.stockfish_path,
             neural_weight=args.neural_weight
         )
         
