@@ -1,0 +1,6 @@
+flask==3.0.2
+flask-cors==4.0.0
+chess==1.10.0
+torch==2.7.1
+numpy==1.26.4
+tqdm==4.66.4

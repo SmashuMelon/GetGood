@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Models & datasets
+models/
+data/
+
+# Logs
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Config (optional, if user-specific)
+.python-version
